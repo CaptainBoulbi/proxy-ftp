@@ -1,0 +1,4 @@
+proxy
+proxy.o
+simpleSocketAPI.h.gch
+simpleSocketAPI.o
