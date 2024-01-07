@@ -7,8 +7,6 @@
 #include  <stdbool.h>
 #include "./simpleSocketAPI.h"
 
-// daily commit
-
 #define SERVADDR "127.0.0.1"        // Définition de l'adresse IP d'écoute
 #define SERVPORT "0"                // Définition du port d'écoute, si 0 port choisi dynamiquement
 #define LISTENLEN 1                 // Taille de la file des demandes de connexion
