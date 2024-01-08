@@ -1,11 +1,12 @@
 CC=gcc
+FLAG=-Wall -Wextra
 
 proxy: proxy.o simpleSocketAPI.o
-	${CC} $^ -o $@ 
+	${CC} $(FLAG) $^ -o $@ 
 proxy.o: proxy.c simpleSocketAPI.h
-	${CC} -c $^ 
+	${CC} $(FLAG) -c $^ 
 simpleSocketAPI.o: simpleSocketAPI.c
-	${CC} -c $^ 
+	${CC} $(FLAG) -c $^ 
 
 .PHONY: clean
 clean:

@@ -127,20 +127,24 @@ int main(){
   char serveurname[serveurlen-1];
   for (int i=0; i<loginlen; i++){
     loginname[i] = loginat[i];
-    printf("%c", loginname[i]);
   }
-  printf("|");
+  loginlen--;
+  loginname[loginlen] = '\0';
   for (int i=0; i<serveurlen; i++){
     serveurname[i] = serveurat[i];
-    printf("%c", serveurname[i]);
   }
+  serveurlen--;
+  serveurname[serveurlen] = '\0';
+
+  printf("%s\n", loginname);
+  printf("%s\n", serveurname);
 
   int serveurSock = 0;
   connect2Server(serveurname, "21", &serveurSock);
   printf("%d\n", serveurSock);
 
   //Fermeture de la connexion
+  close(serveurSock);
   close(descSockCOM);
   close(descSockRDV);
-  close(serveurSock);
 }
