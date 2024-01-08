@@ -1,3 +1,4 @@
+#include <math.h>
 #include  <stdio.h>
 #include  <stdlib.h>
 #include  <sys/socket.h>
@@ -100,13 +101,46 @@ int main(){
   strcpy(buffer, "220: Identification: nomlogin@nomserveur\n");
   write(descSockCOM, buffer, strlen(buffer));
 
-  // suite
+  memset(buffer, 0, MAXBUFFERLEN);
+  while (read(descSockCOM, buffer, MAXBUFFERLEN-1) == 0);
 
-  // memset(buffer, 0, MAXBUFFERLEN);
-  // while (read(descSockCOM, buffer, MAXBUFFERLEN-1) == 0);
-  // printf("%s\n", buffer);
+  char *loginat = NULL;
+  int loginlen = 0;
+  char *serveurat = NULL;
+  int serveurlen = 0;
+
+  int cursor = 0;
+  for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
+  cursor++;
+  loginat = &buffer[cursor];
+  for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
+    loginlen++;
+  }
+  cursor++;
+  serveurat = &buffer[cursor];
+  for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
+    serveurlen++;
+  }
+  cursor++;
+
+  char loginname[loginlen-1];
+  char serveurname[serveurlen-1];
+  for (int i=0; i<loginlen; i++){
+    loginname[i] = loginat[i];
+    printf("%c", loginname[i]);
+  }
+  printf("|");
+  for (int i=0; i<serveurlen; i++){
+    serveurname[i] = serveurat[i];
+    printf("%c", serveurname[i]);
+  }
+
+  int serveurSock = 0;
+  connect2Server(serveurname, "21", &serveurSock);
+  printf("%d\n", serveurSock);
 
   //Fermeture de la connexion
   close(descSockCOM);
   close(descSockRDV);
+  close(serveurSock);
 }
