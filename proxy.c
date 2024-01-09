@@ -15,6 +15,22 @@
 #define MAXHOSTLEN 64               // Taille d'un nom de machine
 #define MAXPORTLEN 64               // Taille d'un numéro de port
 
+void format_userid(char *buffer, char **login, char **serveur){
+  int cursor = 0, loginlen = 0, serveurlen = 0;
+  for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
+  cursor++;
+  *login = &buffer[cursor];
+  for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
+    loginlen++;
+  }
+  buffer[cursor] = '\0';
+  cursor++;
+  *serveur = &buffer[cursor];
+  for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
+    serveurlen++;
+  }
+  buffer[cursor-1] = '\0';
+}
 
 int main(){
   int ecode;                       // Code retour des fonctions
@@ -105,42 +121,17 @@ int main(){
   while (read(descSockCOM, buffer, MAXBUFFERLEN-1) == 0);
 
   char *loginat = NULL;
-  int loginlen = 0;
   char *serveurat = NULL;
+  int loginlen = 0;
   int serveurlen = 0;
 
-  int cursor = 0;
-  for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
-  cursor++;
-  loginat = &buffer[cursor];
-  for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
-    loginlen++;
-  }
-  cursor++;
-  serveurat = &buffer[cursor];
-  for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
-    serveurlen++;
-  }
-  cursor++;
+  format_userid(buffer, &loginat, &serveurat);
 
-  char loginname[loginlen-1];
-  char serveurname[serveurlen-1];
-  for (int i=0; i<loginlen; i++){
-    loginname[i] = loginat[i];
-  }
-  loginlen--;
-  loginname[loginlen] = '\0';
-  for (int i=0; i<serveurlen; i++){
-    serveurname[i] = serveurat[i];
-  }
-  serveurlen--;
-  serveurname[serveurlen] = '\0';
-
-  printf("%s\n", loginname);
-  printf("%s\n", serveurname);
+  printf("login:   '%s'\n", loginat);
+  printf("serveur: '%s'\n", serveurat);
 
   int serveurSock = 0;
-  connect2Server(serveurname, "21", &serveurSock);
+  connect2Server(serveurat, "21", &serveurSock);
   printf("%d\n", serveurSock);
 
   //Fermeture de la connexion
