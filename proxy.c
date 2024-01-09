@@ -1,11 +1,11 @@
 #include <math.h>
-#include  <stdio.h>
-#include  <stdlib.h>
-#include  <sys/socket.h>
-#include  <netdb.h>
-#include  <string.h>
-#include  <unistd.h>
-#include  <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdbool.h>
 #include "./simpleSocketAPI.h"
 
 #define SERVADDR "127.0.0.1"        // Définition de l'adresse IP d'écoute
@@ -14,14 +14,15 @@
 #define MAXBUFFERLEN 1024           // Taille du tampon pour les échanges de données
 #define MAXHOSTLEN 64               // Taille d'un nom de machine
 #define MAXPORTLEN 64               // Taille d'un numéro de port
+#define PORTFTP "21"
 
-void format_userid(char *buffer, char **login, char **serveur){
-  int cursor = 0, loginlen = 0, serveurlen = 0;
+void format_userid(char *buffer, char **login, int *loginlen, char **serveur){
+  int cursor = 0, serveurlen = 0;
   for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
   cursor++;
   *login = &buffer[cursor];
   for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
-    loginlen++;
+    (*loginlen)++;
   }
   buffer[cursor] = '\0';
   cursor++;
@@ -113,26 +114,43 @@ int main(){
 
   /*****
      * Testez de mettre 220 devant BLABLABLA ...
+     *
      * **/
-  strcpy(buffer, "220: Identification: nomlogin@nomserveur\n");
+  buffer[MAXBUFFERLEN-1] = '\0';
+
+  strcpy(buffer, "220: Identification: login@serveur\n");
   write(descSockCOM, buffer, strlen(buffer));
 
-  memset(buffer, 0, MAXBUFFERLEN);
-  while (read(descSockCOM, buffer, MAXBUFFERLEN-1) == 0);
+  //memset(buffer, 0, MAXBUFFERLEN);
+  read(descSockCOM, buffer, MAXBUFFERLEN-1);
+  //printf("recu: '%s'\n", buffer);
 
-  char *loginat = NULL;
-  char *serveurat = NULL;
+  char *loginat = NULL, *serveurat = NULL;
   int loginlen = 0;
-  int serveurlen = 0;
+  //int serveurlen = 0;
 
-  format_userid(buffer, &loginat, &serveurat);
+  format_userid(buffer, &loginat, &loginlen, &serveurat);
 
   printf("login:   '%s'\n", loginat);
   printf("serveur: '%s'\n", serveurat);
 
   int serveurSock = 0;
-  connect2Server(serveurat, "21", &serveurSock);
-  printf("%d\n", serveurSock);
+  connect2Server(serveurat, PORTFTP, &serveurSock);
+
+  strcpy(buffer, "PASV");
+  write(serveurSock, buffer, sizeof("PASV"));
+
+  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
+  printf("connection accepter:\n%s", buffer);
+
+  char* cmd  =        " USER anonymous\n";
+  int cmdlen = sizeof(" USER anonymous\n");
+  printf("envoie: '%s'\n", cmd);
+  write(serveurSock, cmd, cmdlen-1);
+  printf("identification login\n");
+
+  read(serveurSock, buffer, MAXBUFFERLEN-1);
+  printf("reponse: %s", buffer);
 
   //Fermeture de la connexion
   close(serveurSock);
