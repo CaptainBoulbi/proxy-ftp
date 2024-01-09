@@ -131,6 +131,11 @@ int main(){
 
   format_userid(buffer, &loginat, &loginlen, &serveurat);
 
+  char *userlogin = malloc(loginlen+5);
+  strcpy(userlogin, buffer);
+  userlogin[loginlen+5] = '\n';
+  printf("userlogin: '%s'\n", userlogin);
+
   printf("login:   '%s'\n", loginat);
   printf("serveur: '%s'\n", serveurat);
 
@@ -143,10 +148,7 @@ int main(){
   buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
   printf("connection accepter:\n%s", buffer);
 
-  char* cmd  =        " USER anonymous\n";
-  int cmdlen = sizeof(" USER anonymous\n");
-  printf("envoie: '%s'\n", cmd);
-  write(serveurSock, cmd, cmdlen-1);
+  write(serveurSock, userlogin, strlen(userlogin));
   printf("identification login\n");
 
   read(serveurSock, buffer, MAXBUFFERLEN-1);
