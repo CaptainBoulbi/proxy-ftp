@@ -168,36 +168,59 @@ int main(){
   {
     printf("[INFO] getting password from client\n");
 
-    int bufferLen = read(descSockCOM, buffer, MAXBUFFERLEN-1);
-    buffer[bufferLen] = '\0';
-    printf("[INFO] buffer len = %d.\n", bufferLen);
+    buffer[read(descSockCOM, buffer, MAXBUFFERLEN-1)] = '\0';
+    int bufferLen = strlen(buffer);
     printf("[CLIENT READ] '%s'\n", buffer);;
 
-    // write(serveurSock, buffer, bufferLen);
-    // printf("[SERVER WRITE] '%s'\n", buffer);;
-  }
+    for (int i=0; i<bufferLen+1; i++){
+      printf("%d - ", buffer[i]);
+    }
+    printf("\n");
 
-  strcpy(buffer, "PASS hamood\r\n");
-  printf("[INFO] password sent: '%s'.\n", buffer);
-  write(serveurSock, buffer, strlen(buffer));
+    write(serveurSock, buffer, bufferLen);
+    printf("[SERVER WRITE] '%s'\n", buffer);;
+  }
 
   buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
   printf("[SERVER READ] '%s'\n", buffer);;
 
-#if 0
-  strcpy(buffer, "PASV");
-  write(serveurSock, buffer, sizeof("PASV"));
-  printf("[SERVER WRITE] '%s'\n", buffer);;
+#if 1
+  strcpy(buffer, "LIST\r\n");
+  write(serveurSock, buffer, strlen(buffer));
+  printf("[SERVER WRITE] '%s'\n", buffer);
 
-  read(serveurSock, buffer, MAXBUFFERLEN-1);
+  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
   printf("[SERVER READ] '%s'\n", buffer);;
-#endif 
+
+  printf("[INFO] passage au mode manuel\n");
+  strcpy(buffer, "USER anonymous\r\n");
+  write(serveurSock, buffer, strlen(buffer));
+  printf("[SERVER WRITE] '%s'\n", buffer);
+
+  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
+  printf("[SERVER READ] '%s'\n", buffer);;
+
+  strcpy(buffer, "PASS hamood\r\n");
+  write(serveurSock, buffer, strlen(buffer));
+  printf("[SERVER WRITE] '%s'\n", buffer);
+
+  {
+    int len = strlen(buffer);
+    for (int i=0; i<len+1; i++){
+      printf("%d - ", buffer[i]);
+    }
+    printf("\n");
+  }
+
+  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
+  printf("[SERVER READ] '%s'\n", buffer);;
+#endif
 
   //Fermeture de la connexion
   close(serveurSock);
   close(descSockCOM);
   close(descSockRDV);
 
-  printf("[INFO] end of proxy.\n");
+  printf("[INFO] proxy close.\n");
   return 0;
 }

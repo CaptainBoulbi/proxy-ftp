@@ -2,3 +2,5 @@ proxy
 proxy.o
 simpleSocketAPI.h.gch
 simpleSocketAPI.o
+2proxy
+2proxy.c
