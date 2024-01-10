@@ -8,6 +8,10 @@ proxy.o: proxy.c simpleSocketAPI.h
 simpleSocketAPI.o: simpleSocketAPI.c
 	${CC} $(FLAG) -c $^ 
 
-.PHONY: clean
+run: proxy
+	./proxy
+
 clean:
 	rm -f *.o proxy
+
+.PHONY: run clean

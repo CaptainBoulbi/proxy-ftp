@@ -92,8 +92,8 @@ int main(){
     fprintf(stderr, "error in getnameinfo: %s\n", gai_strerror(ecode));
     exit(4);
   }
-  printf("L'adresse d'ecoute est: %s\n", serverAddr);
-  printf("Le port d'ecoute est: %s\n", serverPort);
+  printf("[INFO] L'adresse d'ecoute est: %s\n", serverAddr);
+  printf("[INFO] Le port d'ecoute est: %s\n", serverPort);
 
   // Definition de la taille du tampon contenant les demandes de connexion
   ecode = listen(descSockRDV, LISTENLEN);
@@ -118,12 +118,13 @@ int main(){
      * **/
   buffer[MAXBUFFERLEN-1] = '\0';
 
-  strcpy(buffer, "220: Identification: login@serveur\n");
+  strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de)\n");
   write(descSockCOM, buffer, strlen(buffer));
+  printf("[CLIENT WRITE] '%s'\n", buffer);;
 
   //memset(buffer, 0, MAXBUFFERLEN);
   read(descSockCOM, buffer, MAXBUFFERLEN-1);
-  //printf("recu: '%s'\n", buffer);
+  printf("[CLIENT READ] '%s'\n", buffer);
 
   char *loginat = NULL, *serveurat = NULL;
   int loginlen = 0;
@@ -131,31 +132,72 @@ int main(){
 
   format_userid(buffer, &loginat, &loginlen, &serveurat);
 
-  char *userlogin = malloc(loginlen+5);
+  char *userlogin = malloc(loginlen + sizeof("USER ") + sizeof("\r\n"));
   strcpy(userlogin, buffer);
-  userlogin[loginlen+5] = '\n';
-  printf("userlogin: '%s'\n", userlogin);
+  userlogin[loginlen+5] = '\r';
+  userlogin[loginlen+6] = '\n';
+  printf("[INFO] userlogin: '%s'\n", userlogin);
+  printf("[INFO] userlogin len: '%ld'\n", strlen(userlogin));
 
-  printf("login:   '%s'\n", loginat);
-  printf("serveur: '%s'\n", serveurat);
+  printf("[INFO] login:   '%s'\n", loginat);
+  printf("[INFO] serveur: '%s'\n", serveurat);
 
+  printf("[INFO] connection au serveur\n");
   int serveurSock = 0;
   connect2Server(serveurat, PORTFTP, &serveurSock);
 
-  strcpy(buffer, "PASV");
-  write(serveurSock, buffer, sizeof("PASV"));
+  {
+    int bufferLen = read(serveurSock, buffer, MAXBUFFERLEN-1);
+    buffer[bufferLen] = '\0';
+    printf("[SERVER READ] '%s'\n", buffer);
+    printf("[INFO] connection accepter\n");
+  }
+
+  printf("[INFO] identification login\n");
+  write(serveurSock, userlogin, strlen(userlogin)+1);
+  printf("[SERVER WRITE] '%s'\n", userlogin);;
+
+  {
+    int bufferLen = read(serveurSock, buffer, MAXBUFFERLEN-1);
+    printf("[SERVER READ] '%s'\n", buffer);
+
+    write(descSockCOM, buffer, bufferLen);
+    printf("[CLIENT WRITE] '%s'\n", buffer);
+  }
+
+  {
+    printf("[INFO] getting password from client\n");
+
+    int bufferLen = read(descSockCOM, buffer, MAXBUFFERLEN-1);
+    buffer[bufferLen] = '\0';
+    printf("[INFO] buffer len = %d.\n", bufferLen);
+    printf("[CLIENT READ] '%s'\n", buffer);;
+
+    // write(serveurSock, buffer, bufferLen);
+    // printf("[SERVER WRITE] '%s'\n", buffer);;
+  }
+
+  strcpy(buffer, "PASS hamood\r\n");
+  printf("[INFO] password sent: '%s'.\n", buffer);
+  write(serveurSock, buffer, strlen(buffer));
 
   buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
-  printf("connection accepter:\n%s", buffer);
+  printf("[SERVER READ] '%s'\n", buffer);;
 
-  write(serveurSock, userlogin, strlen(userlogin));
-  printf("identification login\n");
+#if 0
+  strcpy(buffer, "PASV");
+  write(serveurSock, buffer, sizeof("PASV"));
+  printf("[SERVER WRITE] '%s'\n", buffer);;
 
   read(serveurSock, buffer, MAXBUFFERLEN-1);
-  printf("reponse: %s", buffer);
+  printf("[SERVER READ] '%s'\n", buffer);;
+#endif 
 
   //Fermeture de la connexion
   close(serveurSock);
   close(descSockCOM);
   close(descSockRDV);
+
+  printf("[INFO] end of proxy.\n");
+  return 0;
 }
