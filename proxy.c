@@ -153,68 +153,40 @@ int main(){
     printf("[INFO] connection accepter\n");
   }
 
+  strcpy(buffer, "PASV\r\n");
+  write(serveurSock, buffer, strlen(buffer));
+  printf("[SERVER WRITE] '%s'\n", buffer);
+
+  read(serveurSock, buffer, MAXBUFFERLEN-1);
+  printf("[SERVER READ] '%s'\n", buffer);
+
   printf("[INFO] identification login\n");
   write(serveurSock, userlogin, strlen(userlogin)+1);
   printf("[SERVER WRITE] '%s'\n", userlogin);;
 
-  {
-    int bufferLen = read(serveurSock, buffer, MAXBUFFERLEN-1);
+  printf("[INFO] entrez dans la boucle\n");
+  do {
+    int ecode = 0;
+    memset(buffer, 0, MAXBUFFERLEN);
+    ecode = read(serveurSock, buffer, MAXBUFFERLEN-1);
     printf("[SERVER READ] '%s'\n", buffer);
+    if (ecode <= 0) break;
 
-    write(descSockCOM, buffer, bufferLen);
+    ecode = write(descSockCOM, buffer, ecode);
     printf("[CLIENT WRITE] '%s'\n", buffer);
-  }
+    if (ecode <= 0) break;
 
-  {
-    printf("[INFO] getting password from client\n");
+    memset(buffer, 0, MAXBUFFERLEN);
+    ecode = read(descSockCOM, buffer, MAXBUFFERLEN-1);
+    printf("[CLIENT READ] '%s'\n", buffer);
+    if (ecode <= 0) break;
 
-    buffer[read(descSockCOM, buffer, MAXBUFFERLEN-1)] = '\0';
-    int bufferLen = strlen(buffer);
-    printf("[CLIENT READ] '%s'\n", buffer);;
+    ecode = write(serveurSock, buffer, ecode);
+    printf("[SERVER WRITE] '%s'\n", buffer);
+    if (ecode <= 0) break;
+  } while (1);
 
-    for (int i=0; i<bufferLen+1; i++){
-      printf("%d - ", buffer[i]);
-    }
-    printf("\n");
-
-    write(serveurSock, buffer, bufferLen);
-    printf("[SERVER WRITE] '%s'\n", buffer);;
-  }
-
-  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
-  printf("[SERVER READ] '%s'\n", buffer);;
-
-#if 1
-  strcpy(buffer, "LIST\r\n");
-  write(serveurSock, buffer, strlen(buffer));
-  printf("[SERVER WRITE] '%s'\n", buffer);
-
-  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
-  printf("[SERVER READ] '%s'\n", buffer);;
-
-  printf("[INFO] passage au mode manuel\n");
-  strcpy(buffer, "USER anonymous\r\n");
-  write(serveurSock, buffer, strlen(buffer));
-  printf("[SERVER WRITE] '%s'\n", buffer);
-
-  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
-  printf("[SERVER READ] '%s'\n", buffer);;
-
-  strcpy(buffer, "PASS hamood\r\n");
-  write(serveurSock, buffer, strlen(buffer));
-  printf("[SERVER WRITE] '%s'\n", buffer);
-
-  {
-    int len = strlen(buffer);
-    for (int i=0; i<len+1; i++){
-      printf("%d - ", buffer[i]);
-    }
-    printf("\n");
-  }
-
-  buffer[read(serveurSock, buffer, MAXBUFFERLEN-1)] = '\0';
-  printf("[SERVER READ] '%s'\n", buffer);;
-#endif
+  printf("[INFO] main loop broke.\n");
 
   //Fermeture de la connexion
   close(serveurSock);
