@@ -1,5 +1,5 @@
 CC=gcc
-FLAG=-Wall -Wextra
+FLAG=-Wall -Wextra -ggdb
 INC=.
 
 proxy: proxy.o simpleSocketAPI.o
