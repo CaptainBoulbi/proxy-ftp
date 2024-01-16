@@ -19,6 +19,8 @@
 #define MAXPORTLEN 64               // Taille d'un numéro de port
 #define PORTFTP "21"
 
+#define LOG(...) printf("[INFO]          "__VA_ARGS__)
+
 int serveurSock = 0;
 int clientSock = 0;
 
@@ -27,7 +29,7 @@ int server_read(char *buffer){
 
   memset(buffer, 0, MAXBUFFERLEN);
   ecode = read(serveurSock, buffer, MAXBUFFERLEN-1);
-  printf("[SERVER READ] size = %d, '%s'\n", ecode, buffer);
+  printf("[SERVER READ]   size = %d - '%.*s'\n", ecode, ecode-2, buffer);
 
   return ecode;
 }
@@ -37,27 +39,27 @@ int client_read(char *buffer){
 
   memset(buffer, 0, MAXBUFFERLEN);
   ecode = read(clientSock, buffer, MAXBUFFERLEN-1);
-  printf("[CLIENT READ] size = %d, '%s'\n", ecode, buffer);
+  printf("[CLIENT READ]   size = %d - '%.*s'\n", ecode, ecode-2, buffer);
 
   return ecode;
 }
 
 int server_write(char *buffer, int len){
   len = write(serveurSock, buffer, len);
-  printf("[SERVER WRITE] size = %d, '%s'\n", len, buffer);
+  printf("[SERVER WRITE]  size = %d - '%.*s'\n", len, len-2, buffer);
   return len;
 }
 
 int client_write(char *buffer, int len){
   len = write(clientSock, buffer, len);
-  printf("[CLIENT WRITE] size = %d, '%s'\n", len, buffer);
+  printf("[CLIENT WRITE]  size = %d - '%.*s'\n", len, len-2, buffer);
   return len;
 }
 
 void check_err(int errcode, const char *msg){
-  if (errcode < 0) {
+  if (errcode <= 0) {
     fflush(stdout);
-    fprintf(stderr, "[ERROR] %s.\n", msg);
+    fprintf(stderr, "[ERROR]         %s.\n", msg);
     exit(42);
   }
 }
@@ -65,13 +67,11 @@ void check_err(int errcode, const char *msg){
 void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
   int cursor = 0;
   for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
-  cursor++;
-  *login = &buffer[cursor];
+  *login = &buffer[++cursor];
   for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
     (*loginlen)++;
   }
-  buffer[cursor] = '\0';
-  cursor++;
+  buffer[cursor++] = '\0';
   *serveur = &buffer[cursor];
   for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
     (*serveurlen)++;
@@ -145,8 +145,8 @@ int main(){
     fprintf(stderr, "error in getnameinfo: %s\n", gai_strerror(ecode));
     exit(4);
   }
-  printf("[INFO] L'adresse d'ecoute est: %s\n", serverAddr);
-  printf("[INFO] Le port d'ecoute est: %s\n", serverPort);
+  LOG("L'adresse d'ecoute est: %s\n", serverAddr);
+  LOG("Le port d'ecoute est: %s\n", serverPort);
 
   // Definition de la taille du tampon contenant les demandes de connexion
   ecode = listen(descSockRDV, LISTENLEN);
@@ -171,8 +171,8 @@ int main(){
      * **/
   buffer[MAXBUFFERLEN-1] = '\0';
 
-  printf("[INFO] connexion et identification.\n");
-  strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de)\n");
+  LOG("connexion et identification.\n");
+  strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n");
   ecode = client_write(buffer, strlen(buffer));
   check_err(ecode, "a l'envoie de la demande de l'identification au client");
 
@@ -183,14 +183,18 @@ int main(){
   int loginlen = 0, serveurlen = 0;
   format_userid(buffer, &userlogin, &loginat, &loginlen, &serveurat, &serveurlen);
 
+  LOG("login    : %d bytes - '%s'\n", loginlen, loginat);
+  LOG("serveur  : %d bytes - '%s'\n", serveurlen, serveurat);
+  LOG("user cmd : %d bytes - '%s'\n", (int)(loginlen + sizeof("USER ")), userlogin);
+
   ecode = connect2Server(serveurat, PORTFTP, &serveurSock);
   check_err(ecode, "a la connexion du serveur");
-  printf("[INFO] connexion au serveur ftp réussie.\n");
+  LOG("connexion au serveur ftp réussie.\n");
 
   ecode = server_read(buffer);
   check_err(ecode, "a la reponse du serveur apres la connexion");
 
-  ecode = server_write(userlogin, strlen(userlogin)+1);
+  ecode = server_write(userlogin, strlen(userlogin));
   check_err(ecode, "a la l'envoi du USER au serveur");
   free(userlogin);
 
@@ -200,7 +204,7 @@ int main(){
   ecode = client_write(buffer, ecode);
   check_err(ecode, "a l'envoie de la reponse du serveur pour le USER au client");
 
-  printf("[INFO] mot de passe.\n");
+  LOG("mot de passe.\n");
   {
     ecode = client_read(buffer);
     check_err(ecode, "a la lecture du mdp du client");
@@ -215,23 +219,15 @@ int main(){
     check_err(ecode, "a l'envoie de la reponse du serveur pour le mdp au client");
   }
 
+  LOG("la boucle a bouclé.\n");
+  ecode = client_read(buffer);
+  ecode = server_write(buffer, ecode);
+  LOG("la boucle est bouclé.\n");
+
 #if 0
-  printf("[INFO] auto connexion.\n");
+  LOG("PASV.\n");
   {
-    strcpy(buffer, "USER anonymous\r\n");
-    server_write(buffer, strlen(buffer));
-
-    server_read(buffer);
-
-    strcpy(buffer, "PASS hamood\r\n");
-    server_write(buffer, strlen(buffer));
-
-    server_read(buffer);
-  }
-
-  printf("[INFO] EPSV.\n");
-  {
-    strcpy(buffer, "EPSV\r\n");
+    strcpy(buffer, "PASV\r\n");
     ecode = server_write(buffer, strlen(buffer));
     check_err(ecode, "a l'envoie de la cmd PASV au serveur");
     buffer[ecode-2] = '\0';
@@ -242,43 +238,58 @@ int main(){
     char *port = buffer + 39;
     *(port + 4) = '\0';
 
-    printf("[INFO] serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
+    LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
     close(serveurSock);
     ecode = connect2Server(serveurat, port, &serveurSock);
-    printf("[INFO] serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
+    LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
     check_err(ecode, "a la connexion du serveur en mode passive");
-    printf("[INFO] connexion au serveur ftp en mode passive réussie.\n");
+    LOG("connexion au serveur ftp en mode passive réussie.\n");
   }
 #endif
 
-  printf("[INFO] la boucle est a bouclé.\n");
-  ecode = client_read(buffer);
-  ecode = server_write(buffer, ecode);
-  printf("[INFO] la boucle est bouclé.\n");
+  LOG("entrez dans la boucle\n");
 
-  printf("[INFO] entrez dans la boucle\n");
-  while (1) {
-    int ecode = 0;
+  // processus serveur --> client
+  switch (fork()) {
+    case -1: // erreur
+      check_err(-1, "erreur a la création de processus.\n");
+      break;
+    case 0:  // enfant
+      while (1){
+        ecode = server_read(buffer);
+        check_err(ecode, "server read.\n");
 
-    ecode = server_read(buffer);
-    if (ecode <= 0) { printf("[ERROR] server read.\n");  break; }
-
-    ecode = client_write(buffer, ecode);
-    if (ecode <= 0) { printf("[ERROR] client write.\n"); break; }
-
-    ecode = client_read(buffer);
-    if (ecode <= 0) { printf("[ERROR] client read.\n");  break; }
-
-    ecode = server_write(buffer, ecode);
-    if (ecode <= 0) { printf("[ERROR] server write.\n"); break; }
+        ecode = client_write(buffer, ecode);
+        check_err(ecode, "server read.\n");
+      }
+      break;
   }
-  printf("[INFO] sortie de la boucle.\n");
+
+  // processus client --> serveur
+  switch (fork()) {
+    case -1: // erreur
+      check_err(-1, "erreur a la création de processus.\n");
+      break;
+    case 0:  // enfant
+      while (1){
+        ecode = client_read(buffer);
+        check_err(ecode, "client read.\n");
+
+        ecode = server_write(buffer, ecode);
+        check_err(ecode, "server write.\n");
+      }
+      break;
+  }
+
+  LOG("sortie de la boucle.\n");
 
   //Fermeture de la connexion
   close(serveurSock);
   close(clientSock);
   close(descSockRDV);
+  // libere la memoire utiliser
+  free(serveurat);
 
-  printf("[INFO] proxy close.\n");
+  LOG("proxy close.\n");
   return 0;
 }
