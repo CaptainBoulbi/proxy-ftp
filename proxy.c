@@ -84,45 +84,6 @@ void check_err(int errcode, const char *msg){
   }
 }
 
-#if 0
-void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
-  int cursor = 0;
-  // deplace le curseur jusqu'au 1er espace, séparant "USER " et le reste de la cmd
-  for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
-  // debut du login (anonymous ou etu) au char juste apres le curseur
-  *login = &buffer[++cursor];
-  // deplace le curseur jusqu'au @, séparant le login et serveur
-  for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
-    // incremente la variable qui stoque la taille de la chaine de char login 
-    (*loginlen)++;
-  }
-  // modifie le char @ en '\0' pour séparer le login et serveur par le char null
-  buffer[cursor++] = '\0';
-  // debut du serveur a l'emplacement du curseur
-  *serveur = &buffer[cursor];
-  // deplace le curseur jusqu'a la fin pour compter la taille de la chaine de char serveur
-  for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
-    // incremente la taille du serveur
-    (*serveurlen)++;
-  }
-  //(*serveurlen)--;
-  // change le \r\n de la fin de la cmd recus par \0
-  buffer[cursor-1] = '\0';
-
-  // alloue de la memoire suffisante pour la cmd "USER login"
-  *userlogin = malloc(*loginlen + sizeof("USER ") + sizeof("\r\n"));
-  // copie la cmd du buffer dans la variable userlogin
-  strcpy(*userlogin, buffer);
-  // ajoute les char \r\n a la fin de la cmd qui sont necessaire pour le protocole ftp
-  (*userlogin)[*loginlen+5] = '\r';
-  (*userlogin)[*loginlen+6] = '\n';
-
-  // alloue de la memoire pour le nom serveur
-  *serveur = malloc(*serveurlen);
-  // copie le nom du serveur de son emplacement dans le buffer dans la variable serveur
-  strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
-}
-#else
 void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
   int cursor = 0;
   for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
@@ -135,7 +96,6 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
   cursor++;
   *serveur = &buffer[cursor];
   for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
-    serveurlen++;
     (*serveurlen)++;
   }
   buffer[cursor-1] = '\0';
@@ -148,7 +108,6 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
   *serveur = malloc(*serveurlen);
   strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
 }
-#endif
 
 int main(){
   int ecode;                       // Code retour des fonctions
