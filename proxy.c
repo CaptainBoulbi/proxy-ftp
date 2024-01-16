@@ -71,14 +71,20 @@ int client_write(char *buffer, int len){
   return len;
 }
 
+// verifie s'il errcode est un code d'erreur et log le msg avant de quitter le programe
 void check_err(int errcode, const char *msg){
+  // en general il y'a une erreur si le code de retour et <= 0
+  // si le cas d'erreur ne tombe pas dans ce cas, utiliser une autre maniere
   if (errcode <= 0) {
+    // force l'affiche des log [INFO] avant d'ecrire les log d'erreur
+    // permet de synchroniser stdout et stderr
     fflush(stdout);
     fprintf(stderr, "[ERROR]         %s.\n", msg);
     exit(42);
   }
 }
 
+#if 0
 void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
   int cursor = 0;
   // deplace le curseur jusqu'au 1er espace, séparant "USER " et le reste de la cmd
@@ -99,6 +105,7 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
     // incremente la taille du serveur
     (*serveurlen)++;
   }
+  //(*serveurlen)--;
   // change le \r\n de la fin de la cmd recus par \0
   buffer[cursor-1] = '\0';
 
@@ -115,6 +122,33 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
   // copie le nom du serveur de son emplacement dans le buffer dans la variable serveur
   strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
 }
+#else
+void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
+  int cursor = 0;
+  for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
+  cursor++;
+  *login = &buffer[cursor];
+  for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
+    (*loginlen)++;
+  }
+  buffer[cursor] = '\0';
+  cursor++;
+  *serveur = &buffer[cursor];
+  for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
+    serveurlen++;
+    (*serveurlen)++;
+  }
+  buffer[cursor-1] = '\0';
+
+  *userlogin = malloc(*loginlen + sizeof("USER ") + sizeof("\r\n"));
+  strcpy(*userlogin, buffer);
+  (*userlogin)[*loginlen+5] = '\r';
+  (*userlogin)[*loginlen+6] = '\n';
+
+  *serveur = malloc(*serveurlen);
+  strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
+}
+#endif
 
 int main(){
   int ecode;                       // Code retour des fonctions
@@ -215,6 +249,12 @@ int main(){
   LOG("login    : %d bytes - '%s'\n", loginlen, loginat);
   LOG("serveur  : %d bytes - '%s'\n", serveurlen, serveurat);
   LOG("user cmd : %d bytes - '%s'\n", (int)(loginlen + sizeof("USER ")), userlogin);
+
+  LOG("full serveur :\n");
+  for (int i=0; i<serveurlen; i++){
+    printf("%d - ", serveurat[i]);
+  }
+  printf("\n");
 
   ecode = connect2Server(serveurat, PORTFTP, &serveurSock);
   check_err(ecode, "a la connexion du serveur");
