@@ -19,39 +19,54 @@
 #define MAXPORTLEN 64               // Taille d'un numéro de port
 #define PORTFTP "21"
 
+// macro qui permet d'afficher des log plus lisible tout en etant plus facile a écrire qu'un simple printf
 #define LOG(...) printf("[INFO]          "__VA_ARGS__)
 
+// socket du serveur et du client
 int serveurSock = 0;
 int clientSock = 0;
 
+// lis ce qu'a envoyer le serveur et le stock dans buffer
 int server_read(char *buffer){
   int ecode = 0;
 
+  // rempli le buffer de 0, pour supprimer d'ancien requete inutile
   memset(buffer, 0, MAXBUFFERLEN);
+  // lit dans le socket
   ecode = read(serveurSock, buffer, MAXBUFFERLEN-1);
+  // affiche log dans la console
   printf("[SERVER READ]   size = %d - '%.*s'\n", ecode, ecode-2, buffer);
 
   return ecode;
 }
 
+// lis ce qu'a envoyer le client et le stock dans buffer
 int client_read(char *buffer){
   int ecode = 0;
 
+  // rempli le buffer de 0, pour supprimer d'ancien requete inutile
   memset(buffer, 0, MAXBUFFERLEN);
+  // lit dans le socket
   ecode = read(clientSock, buffer, MAXBUFFERLEN-1);
+  // affiche log dans la console
   printf("[CLIENT READ]   size = %d - '%.*s'\n", ecode, ecode-2, buffer);
 
   return ecode;
 }
 
+// evoie la requete stocker dans buffer de la taille len au serveur
 int server_write(char *buffer, int len){
+  // envoie la requete en l'ecrivant dans le socket
   len = write(serveurSock, buffer, len);
+  // affiche log dans la console
   printf("[SERVER WRITE]  size = %d - '%.*s'\n", len, len-2, buffer);
   return len;
 }
 
 int client_write(char *buffer, int len){
+  // envoie la requete en l'ecrivant dans le socket
   len = write(clientSock, buffer, len);
+  // affiche log dans la console
   printf("[CLIENT WRITE]  size = %d - '%.*s'\n", len, len-2, buffer);
   return len;
 }
@@ -66,24 +81,38 @@ void check_err(int errcode, const char *msg){
 
 void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
   int cursor = 0;
+  // deplace le curseur jusqu'au 1er espace, séparant "USER " et le reste de la cmd
   for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
+  // debut du login (anonymous ou etu) au char juste apres le curseur
   *login = &buffer[++cursor];
+  // deplace le curseur jusqu'au @, séparant le login et serveur
   for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
+    // incremente la variable qui stoque la taille de la chaine de char login 
     (*loginlen)++;
   }
+  // modifie le char @ en '\0' pour séparer le login et serveur par le char null
   buffer[cursor++] = '\0';
+  // debut du serveur a l'emplacement du curseur
   *serveur = &buffer[cursor];
+  // deplace le curseur jusqu'a la fin pour compter la taille de la chaine de char serveur
   for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
+    // incremente la taille du serveur
     (*serveurlen)++;
   }
+  // change le \r\n de la fin de la cmd recus par \0
   buffer[cursor-1] = '\0';
 
+  // alloue de la memoire suffisante pour la cmd "USER login"
   *userlogin = malloc(*loginlen + sizeof("USER ") + sizeof("\r\n"));
+  // copie la cmd du buffer dans la variable userlogin
   strcpy(*userlogin, buffer);
+  // ajoute les char \r\n a la fin de la cmd qui sont necessaire pour le protocole ftp
   (*userlogin)[*loginlen+5] = '\r';
   (*userlogin)[*loginlen+6] = '\n';
 
+  // alloue de la memoire pour le nom serveur
   *serveur = malloc(*serveurlen);
+  // copie le nom du serveur de son emplacement dans le buffer dans la variable serveur
   strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
 }
 
