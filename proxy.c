@@ -101,11 +101,11 @@ void go_passive(char *buffer){
 void gerer_passive_data(char *buffer){
   int ecode = 0;
   while (1) {
-    printf("[PASSIVE]");
+    printf("[PASSIVE]\n");
     ecode = read(passiveSock, buffer, MAXBUFFERLEN-1);
     check_err(ecode, "passive socket closed.\n");
 
-    printf("[PORT]");
+    printf("[PORT]\n");
     ecode = write(portSock, buffer, ecode);
     check_err(ecode, "passive socket closed.\n");
   }
