@@ -34,7 +34,8 @@ int client_write(char *buffer, int len);
 
 void gerer_connexion(char *buffer);
 void check_err(int errcode, const char *msg);
-int passive_data(char *cursor, char **server, char **port);
+int passive_data(char *cursor, char begin, char **server, char **port);
+void gerer_passive_data(char *buffer);
 void go_passive(char *buffer);
 void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen);
 
@@ -42,6 +43,24 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
 void go_passive(char *buffer){
   LOG("passage en mode passive.\n");
   int ecode = 0;
+  char *server = NULL, *port = NULL;
+
+  ecode = passive_data(buffer, ' ', &server, &port);
+  check_err(ecode, "a la recupération de l'addr / port de la cmd PORT\n");
+
+  LOG("PORT    :");
+  LOG("serveur : '%s'\n", server);
+  LOG("port    : '%s'\n", port);
+
+  ecode = connect2Server(server, port, &portSock);
+  check_err(ecode+1, "a la connexion au nouveau socket pour le mode passive au niveau du client (PORT)\n");
+
+  LOG("port socket : %d\n", passiveSock);
+
+  ecode = client_write(EXPAND_LIT("220 tkt sa fonxion\r\n"));
+  check_err(ecode, "a l'envoie de la reponse au PORT du client\n");
+
+  // PASV
 
   ecode = server_write(EXPAND_LIT("PASV\r\n"));
   check_err(ecode, "a l'envoie de la cmd PASV au serveur\n");
@@ -49,23 +68,48 @@ void go_passive(char *buffer){
   ecode = server_read(buffer);
   check_err(ecode, "a la reponse du serveur pour la cmd PASV\n");
 
-  char *serveur = NULL, *port = NULL;
-  ecode = passive_data(buffer, &serveur, &port);
+  free(server);
+  free(port);
+
+  ecode = passive_data(buffer, '(', &server, &port);
   check_err(ecode, "a la recupération des données addr / port du mode passive\n");
 
-  LOG("serveur : '%s'\n", serveur);
+  LOG("PASV    :");
+  LOG("serveur : '%s'\n", server);
   LOG("port    : '%s'\n", port);
 
-  ecode = connect2Server(serveur, port, &passiveSock);
+  ecode = connect2Server(server, port, &passiveSock);
   check_err(ecode+1, "a la connexion au nouveau socket pour le mode passive\n");
 
   LOG("passive socket : %d\n", passiveSock);
 
-  free(serveur);
+  free(server);
   free(port);
   LOG("passage en mode passive réussie\n");
+
+  switch (fork()) {
+    case -1: // erreur
+      check_err(-1, "erreur a la création de processus.\n");
+      break;
+    case 0:  // enfant
+      gerer_passive_data(buffer);
+      break;
+  }
+  LOG("fin go_passive.\n");
 }
 
+void gerer_passive_data(char *buffer){
+  int ecode = 0;
+  while (1) {
+    printf("[PASSIVE]");
+    ecode = read(passiveSock, buffer, MAXBUFFERLEN-1);
+    check_err(ecode, "passive socket closed.\n");
+
+    printf("[PORT]");
+    ecode = write(portSock, buffer, ecode);
+    check_err(ecode, "passive socket closed.\n");
+  }
+}
 
 // lis ce qu'a envoyer le serveur et le stock dans buffer
 int server_read(char *buffer){
@@ -160,16 +204,16 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
   strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
 }
 
-int passive_data(char *cursor, char **server, char **port){
+int passive_data(char *cursor, char begin, char **server, char **port){
   int n[6] = {0};
   // deplace le curseur jusqu'au debut des nombres
-  while (*cursor != '(') cursor++;
+  while (*cursor != begin) cursor++;
   cursor++;
   // boucle pour récuperer les 6 nombre pour calculer l'addresse et le port du mode passive
   for (int i=0; i<6; i++){
     // compte le nombre de char du nombre
     int next = 0;
-    while (*(cursor + next) != ',' && *(cursor + next) != ')') next++;
+    while (*(cursor + next) != ',' && *(cursor + next) != ')' && *(cursor + next) != '\r') next++;
     // set le char ',' ou ')' a '\0' pour definir la limite du nombre pour la fonction atoi()
     *(cursor + next) = '\0';
     // recupere le nombre n1 du protocole
@@ -340,7 +384,13 @@ void gerer_connexion(char *buffer){
     check_err(ecode, "a l'envoie de la reponse du serveur pour le mdp au client\n");
   }
 
-  go_passive(buffer);
+  /*
+  * on est partie sur une solution de double processus pour gérer le probleme ou on recois
+  * une requete plus grande que MAXBUFFERLEN, chaque processus est responsable de l'envoie de données
+  * d'une machine a une autre (server vers client et client vers serveur), comme ça pas de probleme
+  * ou le proxy a lu et envoyer la moitier d'une requete du client vers le serveur et attent la reponse
+  * du serveur alors qu'il attent la suite de la requete.
+  */
 
   LOG("creation processus\n");
 
@@ -369,6 +419,11 @@ void gerer_connexion(char *buffer){
       while (1){
         ecode = client_read(buffer);
         check_err(ecode, "client socket closed.\n");
+
+        if (strncmp(buffer, "PORT", 4) == 0){
+          go_passive(buffer);
+          continue;
+        }
 
         ecode = server_write(buffer, ecode);
         check_err(ecode, "server socket closed.\n");
