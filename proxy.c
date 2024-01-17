@@ -129,7 +129,7 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
   int cursor = 0;
   // deplace le curseur jusqu'au 1er espace, séparant "USER " et le reste de la cmd
   for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
-  // debut du login (anonymous ou etu) au char juste apres le curseur
+  // debut du login (anonymous ou etu ou utilisateur de la machien local) au char juste apres le curseur
   *login = &buffer[++cursor];
   // deplace le curseur jusqu'au @, séparant le login et serveur
   for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
@@ -298,7 +298,7 @@ void gerer_connexion(char *buffer){
 
   // envoie msg de connexion au client
   LOG("connexion et identification.\n");
-  ecode = client_write(EXPAND_LIT("220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n"));
+  ecode = client_write(EXPAND_LIT("220: Identification: login@serveur (ex: cptbb@localhost || etu@localhost)\n"));
   check_err(ecode, "a l'envoie de la demande de l'identification au client\n");
 
   // lit la reponse du client pour avoir login@serveur
