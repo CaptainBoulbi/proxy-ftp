@@ -23,12 +23,53 @@
 
 // socket du serveur et du client
 int serveurSock = 0;
-int clientSock = 0;
+int clientSock  = 0;
+int passiveSock = 0;
+int portSock    = 0;
+
+int server_read(char *buffer);
+int server_write(char *buffer, int len);
+int client_read(char *buffer);
+int client_write(char *buffer, int len);
+
+void gerer_connexion(char *buffer);
+void check_err(int errcode, const char *msg);
+int passive_data(char *cursor, char **server, char **port);
+void go_passive(char *buffer);
+void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen);
+
+// passe la connexion au serveur en mode passive
+void go_passive(char *buffer){
+  LOG("passage en mode passive.\n");
+  int ecode = 0;
+
+  ecode = server_write(EXPAND_LIT("PASV\r\n"));
+  check_err(ecode, "a l'envoie de la cmd PASV au serveur\n");
+
+  ecode = server_read(buffer);
+  check_err(ecode, "a la reponse du serveur pour la cmd PASV\n");
+
+  char *serveur = NULL, *port = NULL;
+  ecode = passive_data(buffer, &serveur, &port);
+  check_err(ecode, "a la recupération des données addr / port du mode passive\n");
+
+  LOG("serveur : '%s'\n", serveur);
+  LOG("port    : '%s'\n", port);
+
+  ecode = connect2Server(serveur, port, &passiveSock);
+  check_err(ecode+1, "a la connexion au nouveau socket pour le mode passive\n");
+
+  LOG("passive socket : %d\n", passiveSock);
+
+  free(serveur);
+  free(port);
+  LOG("passage en mode passive réussie\n");
+}
+
 
 // lis ce qu'a envoyer le serveur et le stock dans buffer
 int server_read(char *buffer){
   int ecode = 0;
-
   // rempli le buffer de 0, pour supprimer d'ancien requete inutile
   memset(buffer, 0, MAXBUFFERLEN);
   // lit dans le socket
@@ -42,7 +83,6 @@ int server_read(char *buffer){
 // lis ce qu'a envoyer le client et le stock dans buffer
 int client_read(char *buffer){
   int ecode = 0;
-
   // rempli le buffer de 0, pour supprimer d'ancien requete inutile
   memset(buffer, 0, MAXBUFFERLEN);
   // lit dans le socket
@@ -219,18 +259,35 @@ int main(){
   len = sizeof(struct sockaddr_storage);
   // Attente connexion du client
   // Lorsque demande de connexion, creation d'une socket de communication avec le client
-  clientSock = accept(descSockRDV, (struct sockaddr *) &from, &len);
-  if (clientSock == -1){
-    perror("Erreur accept\n");
-    exit(6);
-  }
-  // Echange de données avec le client connecté
+  while (1){
+    clientSock = accept(descSockRDV, (struct sockaddr *) &from, &len);
+    if (clientSock == -1){
+      perror("Erreur accept\n");
+      exit(6);
+    }
 
-  /*****
-     * Testez de mettre 220 devant BLABLABLA ...
-     *
-     * **/
+    switch (fork()) {
+      case -1: // erreur
+        check_err(-1, "erreur a la création de processus.\n");
+        break;
+      case 0:  // enfant
+        gerer_connexion(buffer);
+        break;
+    }
+  }
+
+  //Fermeture de la connexion
+  close(serveurSock);
+  close(clientSock);
+  close(descSockRDV);
+
+  LOG("proxy close.\n");
+  return 0;
+}
+
+void gerer_connexion(char *buffer){
   buffer[MAXBUFFERLEN-1] = '\0';
+  int ecode = 0;
 
   LOG("connexion et identification.\n");
   //strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n");
@@ -283,33 +340,7 @@ int main(){
     check_err(ecode, "a l'envoie de la reponse du serveur pour le mdp au client\n");
   }
 
-  LOG("passage en mode passive.\n");
-  {
-    ecode = server_write(EXPAND_LIT("PASV\r\n"));
-    check_err(ecode, "a l'envoie de la cmd PASV au serveur\n");
-
-    ecode = server_read(buffer);
-    check_err(ecode, "a la reponse du serveur pour la cmd PASV\n");
-
-    char *serveur = NULL, *port = NULL;
-    ecode = passive_data(buffer, &serveur, &port);
-    check_err(ecode, "a la recupération des données addr / port du mode passive\n");
-
-    LOG("serveur : '%s'\n", serveur);
-    LOG("port    : '%s'\n", port);
-
-    LOG("ancien socket  : %d\n", serveurSock);
-    close(serveurSock);
-
-    ecode = connect2Server(serveur, port, &serveurSock);
-    check_err(ecode+1, "a la connexion au nouveau socket pour le mode passive\n");
-
-    LOG("nouveau socket : %d\n", serveurSock);
-
-    free(serveur);
-    free(port);
-  }
-  LOG("passage en mode passive réussie\n");
+  go_passive(buffer);
 
   LOG("creation processus\n");
 
@@ -349,12 +380,4 @@ int main(){
   wait(NULL);
   // attente 2eme processus finit
   wait(NULL);
-
-  //Fermeture de la connexion
-  close(serveurSock);
-  close(clientSock);
-  close(descSockRDV);
-
-  LOG("proxy close.\n");
-  return 0;
 }
