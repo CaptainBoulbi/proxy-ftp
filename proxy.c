@@ -1,14 +1,11 @@
-#include <asm-generic/errno-base.h>
-#include <asm-generic/errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netdb.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
-#include <errno.h>
 #include "./simpleSocketAPI.h"
 
 #define SERVADDR "127.0.0.1"        // Définition de l'adresse IP d'écoute
@@ -21,6 +18,8 @@
 
 // macro qui permet d'afficher des log plus lisible tout en etant plus facile a écrire qu'un simple printf
 #define LOG(...) printf("[INFO]          "__VA_ARGS__)
+// permet de passer un string et sa taille definit durant la compilation au fonction qui on besoin des 2 informations
+#define EXPAND_LIT(string) string, sizeof(string)
 
 // socket du serveur et du client
 int serveurSock = 0;
@@ -194,8 +193,8 @@ int main(){
   buffer[MAXBUFFERLEN-1] = '\0';
 
   LOG("connexion et identification.\n");
-  strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n");
-  ecode = client_write(buffer, strlen(buffer));
+  //strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n");
+  ecode = client_write(EXPAND_LIT("220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n"));
   check_err(ecode, "a l'envoie de la demande de l'identification au client");
 
   ecode = client_read(buffer);
@@ -216,7 +215,7 @@ int main(){
   printf("\n");
 
   ecode = connect2Server(serveurat, PORTFTP, &serveurSock);
-  check_err(ecode, "a la connexion du serveur");
+  check_err(ecode+1, "a la connexion du serveur");
   LOG("connexion au serveur ftp réussie.\n");
 
   ecode = server_read(buffer);
@@ -248,30 +247,33 @@ int main(){
   }
 
   LOG("la boucle a bouclé.\n");
-  ecode = client_read(buffer);
-  ecode = server_write(buffer, ecode);
+  {
+    ecode = client_read(buffer);
+    check_err(ecode, "padding requete.\n");
+
+    ecode = server_write(buffer, ecode);
+    check_err(ecode, "padding requete.\n");
+  }
   LOG("la boucle est bouclé.\n");
 
-#if 0
+#if 1
   LOG("PASV.\n");
   {
-    strcpy(buffer, "PASV\r\n");
-    ecode = server_write(buffer, strlen(buffer));
+    ecode = server_write(EXPAND_LIT("PASV\r\n"));
     check_err(ecode, "a l'envoie de la cmd PASV au serveur");
-    buffer[ecode-2] = '\0';
 
     ecode = server_read(buffer);
     check_err(ecode, "a la reponse du serveur pour la cmd PASV");
 
-    char *port = buffer + 39;
-    *(port + 4) = '\0';
+    //char *port = buffer + 39;
+    //*(port + 4) = '\0';
 
-    LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
-    close(serveurSock);
-    ecode = connect2Server(serveurat, port, &serveurSock);
-    LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
-    check_err(ecode, "a la connexion du serveur en mode passive");
-    LOG("connexion au serveur ftp en mode passive réussie.\n");
+    //LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
+    //close(serveurSock);
+    //ecode = connect2Server(serveurat, port, &serveurSock);
+    //LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
+    //check_err(ecode, "a la connexion du serveur en mode passive");
+    //LOG("connexion au serveur ftp en mode passive réussie.\n");
   }
 #endif
 
@@ -285,10 +287,10 @@ int main(){
     case 0:  // enfant
       while (1){
         ecode = server_read(buffer);
-        check_err(ecode, "server read.\n");
+        check_err(ecode, "server socket closed.\n");
 
         ecode = client_write(buffer, ecode);
-        check_err(ecode, "server read.\n");
+        check_err(ecode, "client socket closed.\n");
       }
       break;
   }
@@ -301,15 +303,20 @@ int main(){
     case 0:  // enfant
       while (1){
         ecode = client_read(buffer);
-        check_err(ecode, "client read.\n");
+        check_err(ecode, "client socket closed.\n");
 
         ecode = server_write(buffer, ecode);
-        check_err(ecode, "server write.\n");
+        check_err(ecode, "server socket closed.\n");
       }
       break;
   }
 
   LOG("sortie de la boucle.\n");
+
+  // attente 1er processus finit
+  wait(NULL);
+  // attente 2eme processus finit
+  wait(NULL);
 
   //Fermeture de la connexion
   close(serveurSock);
