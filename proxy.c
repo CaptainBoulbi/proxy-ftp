@@ -85,27 +85,67 @@ void check_err(int errcode, const char *msg){
 
 void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
   int cursor = 0;
+  // deplace le curseur jusqu'au 1er espace, séparant "USER " et le reste de la cmd
   for (; buffer[cursor] != ' ' && cursor<MAXBUFFERLEN; cursor++);
-  cursor++;
-  *login = &buffer[cursor];
+  // debut du login (anonymous ou etu) au char juste apres le curseur
+  *login = &buffer[++cursor];
+  // deplace le curseur jusqu'au @, séparant le login et serveur
   for (; buffer[cursor] != '@' && cursor<MAXBUFFERLEN; cursor++){
+    // incremente la variable qui stoque la taille de la chaine de char login 
     (*loginlen)++;
   }
-  buffer[cursor] = '\0';
-  cursor++;
+  // modifie le char @ en '\0' pour séparer le login et serveur par le char null
+  buffer[cursor++] = '\0';
+  // debut du serveur a l'emplacement du curseur
   *serveur = &buffer[cursor];
+  // deplace le curseur jusqu'a la fin pour compter la taille de la chaine de char serveur
   for (; buffer[cursor] != '\n' && cursor<MAXBUFFERLEN; cursor++){
+    // incremente la taille du serveur
     (*serveurlen)++;
   }
+  // change le \r\n de la fin de la cmd recus par \0
   buffer[cursor-1] = '\0';
 
+  // alloue de la memoire suffisante pour la cmd "USER login"
   *userlogin = malloc(*loginlen + sizeof("USER ") + sizeof("\r\n"));
+  // copie la cmd du buffer dans la variable userlogin
   strcpy(*userlogin, buffer);
+  // ajoute les char \r\n a la fin de la cmd qui sont necessaire pour le protocole ftp
   (*userlogin)[*loginlen+5] = '\r';
   (*userlogin)[*loginlen+6] = '\n';
 
+  // alloue de la memoire pour le nom serveur
   *serveur = malloc(*serveurlen);
+  // copie le nom du serveur de son emplacement dans le buffer dans la variable serveur
   strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
+}
+
+int passive_data(char *cursor, char **server, char **port){
+  int n[6] = {0};
+  // deplace le curseur jusqu'au debut des nombres
+  while (*cursor != '(') cursor++;
+  cursor++;
+  // boucle pour récuperer les 6 nombre pour calculer l'addresse et le port du mode passive
+  for (int i=0; i<6; i++){
+    // compte le nombre de char du nombre
+    int next = 0;
+    while (*(cursor + next) != ',' && *(cursor + next) != ')') next++;
+    // set le char ',' ou ')' a '\0' pour definir la limite du nombre pour la fonction atoi()
+    *(cursor + next) = '\0';
+    // recupere le nombre n1 du protocole
+    n[i] = atoi(cursor);
+    // deplace le cursor au prochain nombre
+    cursor = cursor + next + 1;
+  }
+  // alloue de la memoire pour le serveur et port et copy les bonnes valeur dedans
+  *server = malloc(3*4 + 4 + 1);   // taille nombre max (127 : 3) * nombre de nombre (127.0.0.1 : 4) + nombre de point + fin de chaine '\0'
+  //memset(*server, 0, 3*4 + 4 + 1); // remplie la memoire de 0
+  sprintf(*server, "%d.%d.%d.%d", n[0], n[1], n[2], n[3]);
+  *port = malloc(5 + 1);           // taille du port max (65 635) donc 5 char + fin de chaine '\0'
+  //memset(*server, 0, 5 + 1);       // remplie la memoire de 0
+  sprintf(*port, "%d", n[4]*256 + n[5]);
+
+  return 1;
 }
 
 int main(){
@@ -157,7 +197,7 @@ int main(){
   ecode=getsockname(descSockRDV, (struct sockaddr *) &myinfo, &len);
   if (ecode == -1)
   {
-    perror("SERVEUR: getsockname");
+    perror("SERVEUR: getsockname\n");
     exit(4);
   }
   ecode = getnameinfo((struct sockaddr*)&myinfo, sizeof(myinfo), serverAddr,MAXHOSTLEN, 
@@ -172,7 +212,7 @@ int main(){
   // Definition de la taille du tampon contenant les demandes de connexion
   ecode = listen(descSockRDV, LISTENLEN);
   if (ecode == -1) {
-    perror("Erreur initialisation buffer d'écoute");
+    perror("Erreur initialisation buffer d'écoute\n");
     exit(5);
   }
 
@@ -195,10 +235,10 @@ int main(){
   LOG("connexion et identification.\n");
   //strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n");
   ecode = client_write(EXPAND_LIT("220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n"));
-  check_err(ecode, "a l'envoie de la demande de l'identification au client");
+  check_err(ecode, "a l'envoie de la demande de l'identification au client\n");
 
   ecode = client_read(buffer);
-  check_err(ecode, "a la lecture du login@serveur du client");
+  check_err(ecode, "a la lecture du login@serveur du client\n");
 
   char *userlogin = NULL, *loginat, *serveurat = NULL;
   int loginlen = 0, serveurlen = 0;
@@ -208,76 +248,70 @@ int main(){
   LOG("serveur  : %d bytes - '%s'\n", serveurlen, serveurat);
   LOG("user cmd : %d bytes - '%s'\n", (int)(loginlen + sizeof("USER ")), userlogin);
 
-  LOG("full serveur :\n");
-  for (int i=0; i<serveurlen; i++){
-    printf("%d - ", serveurat[i]);
-  }
-  printf("\n");
-
   ecode = connect2Server(serveurat, PORTFTP, &serveurSock);
-  check_err(ecode+1, "a la connexion du serveur");
+  check_err(ecode+1, "a la connexion du serveur\n");
   LOG("connexion au serveur ftp réussie.\n");
 
+  // libere la memoire utiliser
+  free(serveurat);
+
   ecode = server_read(buffer);
-  check_err(ecode, "a la reponse du serveur apres la connexion");
+  check_err(ecode, "a la reponse du serveur apres la connexion\n");
 
   ecode = server_write(userlogin, strlen(userlogin));
-  check_err(ecode, "a la l'envoi du USER au serveur");
+  check_err(ecode, "a la l'envoi du USER au serveur\n");
   free(userlogin);
 
   ecode = server_read(buffer);
-  check_err(ecode, "a la reponse du serveur sur le USER du client");
+  check_err(ecode, "a la reponse du serveur sur le USER du client\n");
 
   ecode = client_write(buffer, ecode);
-  check_err(ecode, "a l'envoie de la reponse du serveur pour le USER au client");
+  check_err(ecode, "a l'envoie de la reponse du serveur pour le USER au client\n");
 
   LOG("mot de passe.\n");
   {
     ecode = client_read(buffer);
-    check_err(ecode, "a la lecture du mdp du client");
+    check_err(ecode, "a la lecture du mdp du client\n");
 
     ecode = server_write(buffer, ecode);
-    check_err(ecode, "a l'envoie du mdp du client vers le serveur");
+    check_err(ecode, "a l'envoie du mdp du client vers le serveur\n");
 
     ecode = server_read(buffer);
-    check_err(ecode, "a la lecture de la reponse du serveur pour le mdp du client");
+    check_err(ecode, "a la lecture de la reponse du serveur pour le mdp du client\n");
 
     ecode = client_write(buffer, ecode);
-    check_err(ecode, "a l'envoie de la reponse du serveur pour le mdp au client");
+    check_err(ecode, "a l'envoie de la reponse du serveur pour le mdp au client\n");
   }
 
-  LOG("la boucle a bouclé.\n");
-  {
-    ecode = client_read(buffer);
-    check_err(ecode, "padding requete.\n");
-
-    ecode = server_write(buffer, ecode);
-    check_err(ecode, "padding requete.\n");
-  }
-  LOG("la boucle est bouclé.\n");
-
-#if 1
-  LOG("PASV.\n");
+  LOG("passage en mode passive.\n");
   {
     ecode = server_write(EXPAND_LIT("PASV\r\n"));
-    check_err(ecode, "a l'envoie de la cmd PASV au serveur");
+    check_err(ecode, "a l'envoie de la cmd PASV au serveur\n");
 
     ecode = server_read(buffer);
-    check_err(ecode, "a la reponse du serveur pour la cmd PASV");
+    check_err(ecode, "a la reponse du serveur pour la cmd PASV\n");
 
-    //char *port = buffer + 39;
-    //*(port + 4) = '\0';
+    char *serveur = NULL, *port = NULL;
+    ecode = passive_data(buffer, &serveur, &port);
+    check_err(ecode, "a la recupération des données addr / port du mode passive\n");
 
-    //LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
-    //close(serveurSock);
-    //ecode = connect2Server(serveurat, port, &serveurSock);
-    //LOG("serveurat = '%s' - port = '%s' - serveurSock = '%d'.\n", serveurat, port, serveurSock);
-    //check_err(ecode, "a la connexion du serveur en mode passive");
-    //LOG("connexion au serveur ftp en mode passive réussie.\n");
+    LOG("serveur : '%s'\n", serveur);
+    LOG("port    : '%s'\n", port);
+
+    LOG("ancien socket  : %d\n", serveurSock);
+    close(serveurSock);
+
+    ecode = connect2Server(serveur, port, &serveurSock);
+    check_err(ecode+1, "a la connexion au nouveau socket pour le mode passive\n");
+
+    LOG("nouveau socket : %d\n", serveurSock);
+
+    free(serveur);
+    free(port);
   }
-#endif
+  LOG("passage en mode passive réussie\n");
 
-  LOG("entrez dans la boucle\n");
+  LOG("creation processus\n");
 
   // processus serveur --> client
   switch (fork()) {
@@ -311,8 +345,6 @@ int main(){
       break;
   }
 
-  LOG("sortie de la boucle.\n");
-
   // attente 1er processus finit
   wait(NULL);
   // attente 2eme processus finit
@@ -322,8 +354,6 @@ int main(){
   close(serveurSock);
   close(clientSock);
   close(descSockRDV);
-  // libere la memoire utiliser
-  free(serveurat);
 
   LOG("proxy close.\n");
   return 0;
