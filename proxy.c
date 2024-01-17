@@ -102,6 +102,7 @@ int server_write(char *buffer, int len){
   return len;
 }
 
+// evoie la requete stocker dans buffer de la taille len au client
 int client_write(char *buffer, int len){
   // envoie la requete en l'ecrivant dans le socket
   len = write(clientSock, buffer, len);
@@ -123,6 +124,7 @@ void check_err(int errcode, const char *msg){
   }
 }
 
+// extrait les informations de la cmd USER login@serveur envoie par le client
 void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, char **serveur, int *serveurlen){
   int cursor = 0;
   // deplace le curseur jusqu'au 1er espace, séparant "USER " et le reste de la cmd
@@ -160,6 +162,7 @@ void format_userid(char *buffer,char **userlogin, char **login, int *loginlen, c
   strcpy(*serveur, buffer + *loginlen + sizeof("USER "));
 }
 
+// extraint les données utiles (ip / port) de la cmd PORT et PASV
 int passive_data(char *cursor, char **server, char **port){
   int n[6] = {0};
   // deplace le curseur jusqu'au debut des nombres
@@ -257,15 +260,18 @@ int main(){
   }
 
   len = sizeof(struct sockaddr_storage);
-  // Attente connexion du client
-  // Lorsque demande de connexion, creation d'une socket de communication avec le client
+
+  // boucle principale qui attent une connexion et gere la connexion dans un processus pour pouvoir receptionner la prochaine connexion
   while (1){
+    // Attente connexion du client
+    // Lorsque demande de connexion, creation d'une socket de communication avec le client
     clientSock = accept(descSockRDV, (struct sockaddr *) &from, &len);
     if (clientSock == -1){
       perror("Erreur accept\n");
       exit(6);
     }
 
+    // crée le processus
     switch (fork()) {
       case -1: // erreur
         check_err(-1, "erreur a la création de processus.\n");
@@ -285,26 +291,31 @@ int main(){
   return 0;
 }
 
+// gere la connexion d'un client avec un serveur
 void gerer_connexion(char *buffer){
   buffer[MAXBUFFERLEN-1] = '\0';
   int ecode = 0;
 
+  // envoie msg de connexion au client
   LOG("connexion et identification.\n");
-  //strcpy(buffer, "220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n");
   ecode = client_write(EXPAND_LIT("220: Identification: login@serveur (ex: anonymous@ftp.fau.de || etu@localhost)\n"));
   check_err(ecode, "a l'envoie de la demande de l'identification au client\n");
 
+  // lit la reponse du client pour avoir login@serveur
   ecode = client_read(buffer);
   check_err(ecode, "a la lecture du login@serveur du client\n");
 
+  // recupere les données utiles de la cmd USER login@serveur
   char *userlogin = NULL, *loginat, *serveurat = NULL;
   int loginlen = 0, serveurlen = 0;
   format_userid(buffer, &userlogin, &loginat, &loginlen, &serveurat, &serveurlen);
 
+  // deboguage : affiche les données recupere
   LOG("login    : %d bytes - '%s'\n", loginlen, loginat);
   LOG("serveur  : %d bytes - '%s'\n", serveurlen, serveurat);
   LOG("user cmd : %d bytes - '%s'\n", (int)(loginlen + sizeof("USER ")), userlogin);
 
+  // ce connecte au serveur envoyer par le client
   ecode = connect2Server(serveurat, PORTFTP, &serveurSock);
   check_err(ecode+1, "a la connexion du serveur\n");
   LOG("connexion au serveur ftp réussie.\n");
@@ -312,45 +323,65 @@ void gerer_connexion(char *buffer){
   // libere la memoire utiliser
   free(serveurat);
 
+  // recupere la reponse du serveur apres la connexion
   ecode = server_read(buffer);
   check_err(ecode, "a la reponse du serveur apres la connexion\n");
 
+  // ce connecte avec l'identifiant fournis par le client au serveur
   ecode = server_write(userlogin, strlen(userlogin));
   check_err(ecode, "a la l'envoi du USER au serveur\n");
   free(userlogin);
 
+  // recupere la reponse du serveur / check si l'identification est bonne
   ecode = server_read(buffer);
   check_err(ecode, "a la reponse du serveur sur le USER du client\n");
 
+  // envois la reponse du serveur pour l'identification au client
   ecode = client_write(buffer, ecode);
   check_err(ecode, "a l'envoie de la reponse du serveur pour le USER au client\n");
 
+  // partie mot de passe
   LOG("mot de passe.\n");
   {
+    // recupere le mdp du client
     ecode = client_read(buffer);
     check_err(ecode, "a la lecture du mdp du client\n");
 
+    // envoie le mdp du client au serveur
     ecode = server_write(buffer, ecode);
     check_err(ecode, "a l'envoie du mdp du client vers le serveur\n");
 
+    // recupere la reponse du serveur pour la connexion avec le mdp
     ecode = server_read(buffer);
     check_err(ecode, "a la lecture de la reponse du serveur pour le mdp du client\n");
 
+    // envoie la reponse du serveur a la connexion au mdp au client
     ecode = client_write(buffer, ecode);
     check_err(ecode, "a l'envoie de la reponse du serveur pour le mdp au client\n");
   }
 
+  // passe la connexion proxy --> serveur en mode passive
   go_passive(buffer);
+
+  /*
+  * on est partie sur une solution de double processus pour gérer le probleme ou on recois
+  * une requete plus grande que MAXBUFFERLEN, chaque processus est responsable de l'envoie de données
+  * d'une machine a une autre (server vers client et client vers serveur), comme ça pas de probleme
+  * ou le proxy a lu et envoyer la moitier d'une requete du client vers le serveur et attent la reponse
+  * du serveur alors qu'il attent la suite de la requete.
+  */
 
   LOG("creation processus\n");
 
-  // processus serveur --> client
+  // processus qui gere les requete serveur --> client
   switch (fork()) {
     case -1: // erreur
       check_err(-1, "erreur a la création de processus.\n");
       break;
     case 0:  // enfant
+      // boucle qui renvoie toute les données recus par le serveur au client
       while (1){
+        // si ecode < 0 alors le socket a etait fermer par le serveur alors on peut exit le processus (effectuer dans le check_err)
         ecode = server_read(buffer);
         check_err(ecode, "server socket closed.\n");
 
@@ -360,13 +391,15 @@ void gerer_connexion(char *buffer){
       break;
   }
 
-  // processus client --> serveur
+  // processus qui gere les requete client --> serveur
   switch (fork()) {
     case -1: // erreur
       check_err(-1, "erreur a la création de processus.\n");
       break;
     case 0:  // enfant
+      // boucle qui renvoie toute les données recus par le client au serveur
       while (1){
+        // si ecode < 0 alors le socket a etait fermer par le client alors on peut exit le processus (effectuer dans le check_err)
         ecode = client_read(buffer);
         check_err(ecode, "client socket closed.\n");
 
